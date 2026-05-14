@@ -1,20 +1,22 @@
+# Web API
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9
+
+# Analytics core
 pandas>=2.0.0
 numpy>=1.24.0
 networkx>=3.1
-scipy>=1.11.0
-sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0
-streamlit>=1.28.0
-plotly>=5.17.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-pydantic>=2.0.0
-python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Dev / testing (not deployed to Vercel)
 pytest>=7.4.0
 pytest-cov>=4.1.0
-great-expectations>=0.18.0
-loguru>=0.7.0
-tqdm>=4.66.0
+
+# Optional: local DB / full dashboard
+# sqlalchemy>=2.0.0
+# psycopg2-binary>=2.9.0
+# streamlit>=1.28.0
+# plotly>=5.17.0
+# scipy>=1.11.0
+# great-expectations>=0.18.0
