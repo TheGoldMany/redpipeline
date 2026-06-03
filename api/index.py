@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -23,6 +23,8 @@ from data.generate_sample import generate_match_events
 from pipeline.analytics.pass_network import PassNetworkConfig, build_pass_network, progressive_pass_stats
 from pipeline.analytics.pressing import PressingConfig, detect_pressing_triggers, pressing_summary
 from pipeline.analytics.xT import calculate_xT
+from pipeline.db import store
+from pipeline.db.templates import DASHBOARD_TEMPLATES
 from pipeline.ingestion.loader import flatten_events
 from pipeline.ingestion.statsbomb_api import StatsBombError, get_competitions, get_events, get_matches
 from pipeline.qa.validators import run_all_checks
@@ -256,6 +258,154 @@ def analyze_match(match_id: int):
     except StatsBombError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return _build_analytics(events, str(match_id))
+
+
+# ---------------------------------------------------------------------------
+# BI persistence — dashboards, notes, training, shortlist
+# ---------------------------------------------------------------------------
+
+@app.get("/api/db-status")
+def db_status():
+    return {"available": store.db_available(), "backend": store.db_backend()}
+
+
+@app.get("/api/templates")
+def templates():
+    return {"templates": DASHBOARD_TEMPLATES}
+
+
+def _require_db():
+    if not store.db_available():
+        raise HTTPException(
+            status_code=503,
+            detail="No database connected. Set the DATABASE_URL environment variable "
+                   "(Postgres) to enable saving. See README for setup.",
+        )
+
+
+# ── Dashboards ──────────────────────────────────────────────────────────────
+
+@app.get("/api/dashboards")
+def list_dashboards():
+    _require_db()
+    return {"dashboards": store.list_rows("dashboards", order_desc="updated_at")}
+
+
+@app.post("/api/dashboards")
+def create_dashboard(payload: dict = Body(...)):
+    _require_db()
+    return store.create_row("dashboards", {
+        "name": payload.get("name", "Untitled dashboard"),
+        "context": payload.get("context", "custom"),
+        "layout": payload.get("layout", []),
+    })
+
+
+@app.put("/api/dashboards/{dash_id}")
+def save_dashboard(dash_id: int, payload: dict = Body(...)):
+    _require_db()
+    row = store.update_row("dashboards", dash_id, payload)
+    if not row:
+        raise HTTPException(404, "Dashboard not found")
+    return row
+
+
+@app.delete("/api/dashboards/{dash_id}")
+def remove_dashboard(dash_id: int):
+    _require_db()
+    return {"deleted": store.delete_row("dashboards", dash_id)}
+
+
+# ── Notes / recommendations ─────────────────────────────────────────────────
+
+@app.get("/api/notes")
+def list_notes(scope: str | None = None, ref_id: str | None = None):
+    _require_db()
+    where = {}
+    if scope:
+        where["scope"] = scope
+    if ref_id:
+        where["ref_id"] = ref_id
+    return {"notes": store.list_rows("notes", where=where or None)}
+
+
+@app.post("/api/notes")
+def create_note(payload: dict = Body(...)):
+    _require_db()
+    return store.create_row("notes", payload)
+
+
+@app.put("/api/notes/{note_id}")
+def update_note(note_id: int, payload: dict = Body(...)):
+    _require_db()
+    row = store.update_row("notes", note_id, payload)
+    if not row:
+        raise HTTPException(404, "Note not found")
+    return row
+
+
+@app.delete("/api/notes/{note_id}")
+def delete_note(note_id: int):
+    _require_db()
+    return {"deleted": store.delete_row("notes", note_id)}
+
+
+# ── Training sessions ───────────────────────────────────────────────────────
+
+@app.get("/api/training")
+def list_training():
+    _require_db()
+    return {"training": store.list_rows("training", order_desc="session_date")}
+
+
+@app.post("/api/training")
+def create_training(payload: dict = Body(...)):
+    _require_db()
+    return store.create_row("training", payload)
+
+
+@app.put("/api/training/{row_id}")
+def update_training(row_id: int, payload: dict = Body(...)):
+    _require_db()
+    row = store.update_row("training", row_id, payload)
+    if not row:
+        raise HTTPException(404, "Training session not found")
+    return row
+
+
+@app.delete("/api/training/{row_id}")
+def delete_training(row_id: int):
+    _require_db()
+    return {"deleted": store.delete_row("training", row_id)}
+
+
+# ── Recruitment shortlist ───────────────────────────────────────────────────
+
+@app.get("/api/shortlist")
+def list_shortlist(status: str | None = None):
+    _require_db()
+    return {"shortlist": store.list_rows("shortlist", where={"status": status} if status else None)}
+
+
+@app.post("/api/shortlist")
+def create_shortlist(payload: dict = Body(...)):
+    _require_db()
+    return store.create_row("shortlist", payload)
+
+
+@app.put("/api/shortlist/{row_id}")
+def update_shortlist(row_id: int, payload: dict = Body(...)):
+    _require_db()
+    row = store.update_row("shortlist", row_id, payload)
+    if not row:
+        raise HTTPException(404, "Shortlist entry not found")
+    return row
+
+
+@app.delete("/api/shortlist/{row_id}")
+def delete_shortlist(row_id: int):
+    _require_db()
+    return {"deleted": store.delete_row("shortlist", row_id)}
 
 
 @app.post("/api/upload")

@@ -9,6 +9,10 @@ numpy>=1.24.0
 networkx>=3.1
 loguru>=0.7.0
 
+# Persistence (BI tool: dashboards, notes, training, shortlist)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0   # Postgres driver (Vercel Postgres / Neon / Supabase)
+
 # Dev / testing (not deployed to Vercel)
 pytest>=7.4.0
 pytest-cov>=4.1.0

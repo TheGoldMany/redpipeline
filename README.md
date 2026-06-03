@@ -1,10 +1,68 @@
-# RedPipeline — High-Performance Football Analytics ETL
+# RedPipeline — Football Analytics BI Tool
 
-> **Author:** Senior Football Data Analyst Candidate  
-> **Target role:** Senior Football Data Analyst, Manchester United FC  
-> **Stack:** Python · Pandas · NetworkX · PostgreSQL · Streamlit · Plotly
+> **Stack:** Python · FastAPI · Pandas · NetworkX · PostgreSQL · Plotly · Alpine.js
+
+A personal **business-intelligence tool for football decisions** — post-match
+analysis, recruitment, training planning and squad tracking. Build dashboards
+from templates or from scratch, populate them with real match data (StatsBomb
+Open Data), and capture your own suggestions and notes, all saved to a database.
 
 ---
+
+## The BI Web App
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn api.index:app --reload --port 8000
+# open http://localhost:8000
+```
+
+### How it works
+
+1. **Create a dashboard** — pick a template (Match Review, Recruitment Board,
+   Training Planner, Squad Tracking) or start blank.
+2. **Load a match** — *Change match* → browse real competitions/matches from
+   StatsBomb Open Data, load the synthetic demo, or upload a StatsBomb JSON file.
+3. **Customise** — *Edit* mode lets you add/remove/reorder/resize widgets:
+   KPI cards, defensive-weakness heatmap, pass network, pressing map, player
+   bar chart, notes, recruitment shortlist, training-load chart, text blocks.
+4. **Capture suggestions** — note widgets and the shortlist let you record
+   post-match observations, signing recommendations and training plans. Every
+   dashboard, note, training session and shortlist entry is saved.
+
+### Database setup (for saving)
+
+The app runs without a database (read-only: explore matches), but to **save**
+dashboards/notes/training/shortlists it needs a Postgres connection via the
+`DATABASE_URL` environment variable.
+
+| Environment | What to do |
+|---|---|
+| **Local** | Nothing — falls back to a local `redpipeline.db` SQLite file automatically. |
+| **Vercel** | Add a Postgres database (Vercel Postgres / Neon / Supabase — all have free tiers) and set `DATABASE_URL` in the project's Environment Variables. |
+
+Example (any Postgres):
+
+```bash
+export DATABASE_URL="postgresql://user:pass@host:5432/dbname"
+```
+
+Tables (`dashboards`, `notes`, `training`, `shortlist`) are created
+automatically on first run.
+
+### Deploying to Vercel
+
+The repo is Vercel-ready (`vercel.json`): the FastAPI app in `api/index.py` is
+the serverless function, `public/index.html` is served statically, and the
+`pipeline/`+`data/` packages are bundled with the function. Push to your
+connected repo, then add `DATABASE_URL` in **Settings → Environment Variables**
+to enable saving.
+
+---
+
+## Underlying Analytics Engine
+
+> The original engineering-first ETL pipeline that powers every widget.
 
 ## Overview
 
