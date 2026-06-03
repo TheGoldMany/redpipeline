@@ -35,7 +35,7 @@
     input[type=range]{accent-color:#dc143c;padding:0}
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:center;justify-content:center;padding:1rem}
     .grid-dash{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-    .w-2{grid-column:span 2}
+    .span-2{grid-column:1 / -1}
     .drop-zone{border:2px dashed #2a2a38;border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;transition:.2s}
     .drop-zone:hover{border-color:#dc143c;background:#dc143c0a}
     ::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:#0f0f14}::-webkit-scrollbar-thumb{background:#2a2a38;border-radius:3px}
@@ -75,7 +75,7 @@
 
       <template x-if="!dbAvailable">
         <div class="text-xs text-gray-500 px-1 py-2 leading-relaxed">
-          No database connected — saving is disabled. Set <code class="text-gray-300">DATABASE_URL</code> to enable. You can still explore matches.
+          💾 Saving in this browser. Set <code class="text-gray-300">DATABASE_URL</code> to sync across devices.
         </div>
       </template>
 
@@ -86,7 +86,7 @@
             <span class="flex-1 truncate" x-text="d.name"></span>
           </div>
         </template>
-        <template x-if="dbAvailable && dashboards.length===0">
+        <template x-if="dashboards.length===0">
           <div class="text-xs text-gray-600 px-1 py-2">No dashboards yet. Click <strong>+ New</strong>.</div>
         </template>
       </div>
@@ -108,7 +108,7 @@
     </div>
 
     <div class="px-3 py-2 border-t border-[#2a2a38] flex items-center gap-2">
-      <span class="pill" :class="dbAvailable ? 'badge-pass' : 'badge-warn'" x-text="dbAvailable ? 'DB: '+dbBackend : 'DB: off'"></span>
+      <span class="pill" :class="dbAvailable ? 'badge-pass' : 'badge-info'" x-text="storageLabel()"></span>
     </div>
   </aside>
 
@@ -169,7 +169,7 @@
         <!-- Widget grid -->
         <div class="grid-dash">
           <template x-for="(w,idx) in activeDash.layout" :key="w.uid">
-            <div class="card p-4" :class="{'w-2': w.w===2}">
+            <div class="card p-4" :class="{'span-2': w.w===2}">
               <!-- widget header -->
               <div class="flex items-center gap-2 mb-3">
                 <template x-if="!editMode"><span class="font-semibold text-white text-sm" x-text="w.title"></span></template>
@@ -186,7 +186,6 @@
                 </template>
               </div>
               <!-- widget body -->
-              <div x-html="''"></div>
               <div :id="'wc-'+w.uid">
                 <!-- match-based widgets render Plotly / declarative below via renderWidget -->
                 <template x-if="['heatmap','network','pressing','players','training_chart'].includes(w.type)">
@@ -241,7 +240,7 @@
                     <div class="flex gap-2">
                       <input x-model="noteDraft[w.uid+'_t']" placeholder="Title" class="w-32 text-xs">
                       <input x-model="noteDraft[w.uid+'_b']" placeholder="Suggestion / observation…" class="flex-1 text-xs" @keydown.enter="addNote(w)">
-                      <button class="btn btn-primary btn-sm" @click="addNote(w)" :disabled="!dbAvailable">Add</button>
+                      <button class="btn btn-primary btn-sm" @click="addNote(w)">Add</button>
                     </div>
                   </div>
                 </template>
@@ -272,7 +271,7 @@
                       <input x-model="slDraft.player_name" placeholder="Player name" class="w-40 text-xs">
                       <input x-model="slDraft.position" placeholder="Pos" class="w-16 text-xs">
                       <input x-model="slDraft.notes" placeholder="Notes" class="flex-1 text-xs" @keydown.enter="addShortlist()">
-                      <button class="btn btn-primary btn-sm" @click="addShortlist()" :disabled="!dbAvailable">Add player</button>
+                      <button class="btn btn-primary btn-sm" @click="addShortlist()">Add player</button>
                     </div>
                   </div>
                 </template>
@@ -293,7 +292,7 @@
                     <input x-model="trDraft.focus" placeholder="Focus" class="w-32 text-xs">
                     <input type="number" x-model.number="trDraft.rpe" placeholder="RPE" min="1" max="10" class="w-16 text-xs">
                     <input type="number" x-model.number="trDraft.duration_min" placeholder="Min" class="w-16 text-xs">
-                    <button class="btn btn-primary btn-sm" @click="addTraining()" :disabled="!dbAvailable">Log session</button>
+                    <button class="btn btn-primary btn-sm" @click="addTraining()">Log session</button>
                   </div>
                 </template>
               </div>
@@ -427,9 +426,23 @@ function bi(){
       this.dbAvailable=st.available; this.dbBackend=st.backend||'';
       const tp = await this.apiGet('/api/templates').catch(()=>({templates:[]}));
       this.templates=tp.templates;
-      if(this.dbAvailable){ await this.refreshAll(); }
+      await this.refreshAll();            // works with DB or browser storage
       this.loadCompetitions();
     },
+
+    // ── storage abstraction: Postgres API when available, else this browser ──
+    storageLabel(){ return this.dbAvailable ? ('DB: '+this.dbBackend) : 'Saved in browser'; },
+    localKey(c){ return 'redpipe_'+c; },
+    localGet(c){ try{ return JSON.parse(localStorage.getItem(this.localKey(c))||'[]'); }catch(e){ return []; } },
+    localSet(c,a){ localStorage.setItem(this.localKey(c),JSON.stringify(a)); },
+    localCreate(c,o){ const a=this.localGet(c); const id=a.reduce((m,x)=>Math.max(m,x.id||0),0)+1; const row={...o,id,created_at:new Date().toISOString(),updated_at:new Date().toISOString()}; a.unshift(row); this.localSet(c,a); return row; },
+    localUpdate(c,id,p){ const a=this.localGet(c); const i=a.findIndex(x=>x.id===id); if(i>=0){ a[i]={...a[i],...p,updated_at:new Date().toISOString()}; this.localSet(c,a); return a[i]; } return null; },
+    localDelete(c,id){ this.localSet(c,this.localGet(c).filter(x=>x.id!==id)); return {deleted:true}; },
+
+    async dataList(c){ if(this.dbAvailable){ const d=await this.apiGet('/api/'+c); return d[c]; } return this.localGet(c); },
+    async dataCreate(c,o){ return this.dbAvailable ? this.apiSend('/api/'+c,'POST',o) : this.localCreate(c,o); },
+    async dataUpdate(c,id,o){ return this.dbAvailable ? this.apiSend('/api/'+c+'/'+id,'PUT',o) : this.localUpdate(c,id,o); },
+    async dataDelete(c,id){ return this.dbAvailable ? this.apiSend('/api/'+c+'/'+id,'DELETE',{}) : this.localDelete(c,id); },
 
     // ── helpers ──
     uid(){ return (crypto.randomUUID?crypto.randomUUID():'w'+Math.random().toString(36).slice(2)); },
@@ -440,12 +453,12 @@ function bi(){
 
     async refreshAll(){
       const [d,n,t,s]=await Promise.all([
-        this.apiGet('/api/dashboards').catch(()=>({dashboards:[]})),
-        this.apiGet('/api/notes').catch(()=>({notes:[]})),
-        this.apiGet('/api/training').catch(()=>({training:[]})),
-        this.apiGet('/api/shortlist').catch(()=>({shortlist:[]})),
+        this.dataList('dashboards').catch(()=>[]),
+        this.dataList('notes').catch(()=>[]),
+        this.dataList('training').catch(()=>[]),
+        this.dataList('shortlist').catch(()=>[]),
       ]);
-      this.dashboards=d.dashboards; this.notes=n.notes; this.training=t.training; this.shortlist=s.shortlist;
+      this.dashboards=d; this.notes=n; this.training=t; this.shortlist=s;
     },
 
     teamData(){ return (this.matchData&&this.activeTeam)?this.matchData.by_team[this.activeTeam]:null; },
@@ -457,16 +470,10 @@ function bi(){
     async createFromTemplate(t){
       this.showTemplate=false;
       const layout=(t.layout||[]).map(w=>({...w,uid:this.uid(),config:w.config?{...w.config}:{}}));
-      if(this.dbAvailable){
-        try{
-          const d=await this.apiSend('/api/dashboards','POST',{name:t.name,context:t.context,layout});
-          this.dashboards.unshift(d); this.openDashboard(d); this.notify('Dashboard created');
-        }catch(e){ this.notify(e.message,true); }
-      }else{
-        // ephemeral
-        this.openDashboard({id:null,name:t.name,context:t.context,layout});
-        this.notify('Created (not saved — no database)',true);
-      }
+      try{
+        const d=await this.dataCreate('dashboards',{name:t.name,context:t.context,layout});
+        this.dashboards.unshift(d); this.openDashboard(d); this.notify('Dashboard created');
+      }catch(e){ this.notify(e.message,true); }
     },
     openDashboard(d){
       // deep clone so edits are local until saved
@@ -476,13 +483,13 @@ function bi(){
       this.$nextTick(()=>this.renderDashboardCharts());
     },
     async saveDashboard(){
-      if(!this.dbAvailable){ this.notify('No database — cannot save',true); return; }
       try{
+        const body={name:this.activeDash.name,context:this.activeDash.context,layout:this.activeDash.layout};
         if(this.activeDash.id){
-          const d=await this.apiSend('/api/dashboards/'+this.activeDash.id,'PUT',{name:this.activeDash.name,context:this.activeDash.context,layout:this.activeDash.layout});
-          const i=this.dashboards.findIndex(x=>x.id===d.id); if(i>=0) this.dashboards[i]=d;
+          const d=await this.dataUpdate('dashboards',this.activeDash.id,body);
+          const i=this.dashboards.findIndex(x=>x.id===this.activeDash.id); if(i>=0&&d) this.dashboards[i]=d;
         }else{
-          const d=await this.apiSend('/api/dashboards','POST',{name:this.activeDash.name,context:this.activeDash.context,layout:this.activeDash.layout});
+          const d=await this.dataCreate('dashboards',body);
           this.activeDash.id=d.id; this.dashboards.unshift(d);
         }
         this.editMode=false; this.notify('Saved'); this.$nextTick(()=>this.renderDashboardCharts());
@@ -490,7 +497,7 @@ function bi(){
     },
     async deleteDashboard(){
       if(!confirm('Delete this dashboard?')) return;
-      if(this.activeDash.id && this.dbAvailable){ try{ await this.apiSend('/api/dashboards/'+this.activeDash.id,'DELETE',{}); }catch(e){} }
+      if(this.activeDash.id){ try{ await this.dataDelete('dashboards',this.activeDash.id); }catch(e){} }
       this.dashboards=this.dashboards.filter(d=>d.id!==this.activeDash.id);
       this.activeDash=null; this.editMode=false;
     },
@@ -532,20 +539,20 @@ function bi(){
     async addNote(w){
       const t=this.noteDraft[w.uid+'_t']||''; const b=this.noteDraft[w.uid+'_b']||'';
       if(!b.trim()){ return; }
-      try{ const n=await this.apiSend('/api/notes','POST',{scope:w.config.scope||'general',title:t,body:b,ref_id:this.matchData?this.matchData.match_id:null,ref_label:this.matchLabel,tags:[]});
+      try{ const n=await this.dataCreate('notes',{scope:w.config.scope||'general',title:t,body:b,ref_id:this.matchData?this.matchData.match_id:null,ref_label:this.matchLabel,tags:[]});
         this.notes.unshift(n); this.noteDraft[w.uid+'_t']=''; this.noteDraft[w.uid+'_b']=''; }
       catch(e){ this.notify(e.message,true); }
     },
-    async deleteNote(id){ try{ await this.apiSend('/api/notes/'+id,'DELETE',{}); this.notes=this.notes.filter(n=>n.id!==id);}catch(e){ this.notify(e.message,true);} },
+    async deleteNote(id){ try{ await this.dataDelete('notes',id); this.notes=this.notes.filter(n=>n.id!==id);}catch(e){ this.notify(e.message,true);} },
 
     // ── shortlist ──
-    async addShortlist(){ if(!this.slDraft.player_name.trim()) return; try{ const s=await this.apiSend('/api/shortlist','POST',{player_name:this.slDraft.player_name,position:this.slDraft.position,notes:this.slDraft.notes,status:'watch',rating:3,tags:[]}); this.shortlist.unshift(s); this.slDraft={player_name:'',position:'',notes:''}; }catch(e){ this.notify(e.message,true);} },
-    async updateShortlist(s){ try{ await this.apiSend('/api/shortlist/'+s.id,'PUT',{status:s.status,rating:s.rating,notes:s.notes}); }catch(e){ this.notify(e.message,true);} },
+    async addShortlist(){ if(!this.slDraft.player_name.trim()) return; try{ const s=await this.dataCreate('shortlist',{player_name:this.slDraft.player_name,position:this.slDraft.position,notes:this.slDraft.notes,status:'watch',rating:3,tags:[]}); this.shortlist.unshift(s); this.slDraft={player_name:'',position:'',notes:''}; }catch(e){ this.notify(e.message,true);} },
+    async updateShortlist(s){ try{ await this.dataUpdate('shortlist',s.id,{status:s.status,rating:s.rating,notes:s.notes}); }catch(e){ this.notify(e.message,true);} },
     cycleRating(s){ s.rating=((s.rating||0)%5)+1; this.updateShortlist(s); },
-    async deleteShortlist(id){ try{ await this.apiSend('/api/shortlist/'+id,'DELETE',{}); this.shortlist=this.shortlist.filter(s=>s.id!==id);}catch(e){ this.notify(e.message,true);} },
+    async deleteShortlist(id){ try{ await this.dataDelete('shortlist',id); this.shortlist=this.shortlist.filter(s=>s.id!==id);}catch(e){ this.notify(e.message,true);} },
 
     // ── training ──
-    async addTraining(){ if(!this.trDraft.session_date) return; try{ const t=await this.apiSend('/api/training','POST',{session_date:this.trDraft.session_date,focus:this.trDraft.focus,rpe:this.trDraft.rpe,duration_min:this.trDraft.duration_min,metrics:{}}); this.training.push(t); this.training.sort((a,b)=>a.session_date.localeCompare(b.session_date)); this.trDraft={session_date:new Date().toISOString().slice(0,10),focus:'',rpe:null,duration_min:null}; this.$nextTick(()=>this.renderDashboardCharts()); }catch(e){ this.notify(e.message,true);} },
+    async addTraining(){ if(!this.trDraft.session_date) return; try{ const t=await this.dataCreate('training',{session_date:this.trDraft.session_date,focus:this.trDraft.focus,rpe:this.trDraft.rpe,duration_min:this.trDraft.duration_min,metrics:{}}); this.training.push(t); this.training.sort((a,b)=>a.session_date.localeCompare(b.session_date)); this.trDraft={session_date:new Date().toISOString().slice(0,10),focus:'',rpe:null,duration_min:null}; this.$nextTick(()=>this.renderDashboardCharts()); }catch(e){ this.notify(e.message,true);} },
 
     // ── chart rendering ──
     renderDashboardCharts(){ if(!this.activeDash) return; this.activeDash.layout.forEach(w=>this.renderOneWidget(w)); },
