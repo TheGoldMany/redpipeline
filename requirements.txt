@@ -22,5 +22,5 @@ pytest-cov>=4.1.0
 # psycopg2-binary>=2.9.0
 # streamlit>=1.28.0
 # plotly>=5.17.0
-# scipy>=1.11.0
+scipy>=1.11.0
 # great-expectations>=0.18.0
