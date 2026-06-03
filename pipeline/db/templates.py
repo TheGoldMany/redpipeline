@@ -24,7 +24,7 @@ DASHBOARD_TEMPLATES = [
         "name": "Match Review",
         "context": "match",
         "description": "Post-match tactical analysis: KPIs, opponent weaknesses, pressing and pass structure.",
-        "icon": "📋",
+        "icon": "clipboard",
         "layout": [
             {"type": "kpi",      "title": "Match KPIs",                 "w": 2, "config": {}},
             {"type": "heatmap",  "title": "Opponent Defensive Weakness","w": 1, "config": {}},
@@ -39,7 +39,7 @@ DASHBOARD_TEMPLATES = [
         "name": "Recruitment Board",
         "context": "recruitment",
         "description": "Scouting shortlist with ratings and notes, plus on-ball metrics from the active match.",
-        "icon": "🔎",
+        "icon": "search",
         "layout": [
             {"type": "shortlist", "title": "Scouting Shortlist",   "w": 2, "config": {}},
             {"type": "players",   "title": "Player Output (active match)", "w": 2, "config": {}},
@@ -51,7 +51,7 @@ DASHBOARD_TEMPLATES = [
         "name": "Training Planner",
         "context": "training",
         "description": "Track session load and focus over time, and capture training recommendations.",
-        "icon": "🏋️",
+        "icon": "activity",
         "layout": [
             {"type": "training_chart", "title": "Training Load & RPE", "w": 2, "config": {"metric": "rpe"}},
             {"type": "note",           "title": "Training Notes & Plan", "w": 2, "config": {"scope": "training"}},
@@ -62,7 +62,7 @@ DASHBOARD_TEMPLATES = [
         "name": "Squad Tracking",
         "context": "squad",
         "description": "Follow player output and team structure across the matches you analyse.",
-        "icon": "👥",
+        "icon": "users",
         "layout": [
             {"type": "players", "title": "Player Output",     "w": 2, "config": {}},
             {"type": "network", "title": "Team Shape",         "w": 1, "config": {"min_passes": 4}},
@@ -75,7 +75,7 @@ DASHBOARD_TEMPLATES = [
         "name": "Blank Dashboard",
         "context": "custom",
         "description": "Start from scratch and add the widgets you want.",
-        "icon": "➕",
+        "icon": "plus",
         "layout": [],
     },
 ]
