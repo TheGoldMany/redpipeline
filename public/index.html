@@ -111,6 +111,38 @@
       <h1 class="text-3xl font-bold text-white mb-1">Welcome to RedPipeline</h1>
       <p class="text-gray-400 mb-8">Upload a StatsBomb events file or load the built-in demo to explore tactical analytics instantly.</p>
 
+      <!-- Primary: real data browser -->
+      <div class="card p-6 mb-4 border-[#dc143c44]">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-3xl">⚽</span>
+          <h3 class="font-bold text-white text-lg">Browse Real Matches</h3>
+          <span class="pill badge-pass ml-1">StatsBomb Open Data</span>
+        </div>
+        <p class="text-gray-400 text-sm mb-4">Analyse real professional matches — World Cup finals, Champions League, La Liga (Messi era) and more. Live data, no upload needed.</p>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block uppercase tracking-wider">Competition &amp; season</label>
+            <select x-model="selectedComp" @change="loadMatches()" class="w-full" :disabled="compLoading">
+              <option value="" disabled selected x-text="compLoading ? 'Loading competitions…' : 'Select a competition'"></option>
+              <template x-for="c in competitions" :key="c.competition_id + '-' + c.season_id">
+                <option :value="c.competition_id + ':' + c.season_id" x-text="c.label"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block uppercase tracking-wider">Match</label>
+            <select x-model="selectedMatch" @change="analyzeMatch()" class="w-full" :disabled="!matchList.length || matchLoading">
+              <option value="" disabled selected x-text="matchLoading ? 'Loading matches…' : (matchList.length ? 'Select a match' : 'Pick a competition first')"></option>
+              <template x-for="m in matchList" :key="m.match_id">
+                <option :value="m.match_id" x-text="`${m.label}  ·  ${m.match_date}`"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <p class="text-xs text-gray-600" x-show="matchList.length" x-text="`${matchList.length} matches available`"></p>
+      </div>
+
       <div class="grid grid-cols-2 gap-4 mb-8">
         <div class="card p-6">
           <div class="text-3xl mb-3">⚡</div>
@@ -121,7 +153,7 @@
         <div class="card p-6">
           <div class="text-3xl mb-3">📂</div>
           <h3 class="font-bold text-white text-lg mb-1">Upload Your Data</h3>
-          <p class="text-gray-400 text-sm mb-4">Drop a StatsBomb Open Data events <code class="text-white bg-[#2a2a38] px-1 rounded">.json</code> file.</p>
+          <p class="text-gray-400 text-sm mb-4">Drop a StatsBomb events <code class="text-white bg-[#2a2a38] px-1 rounded">.json</code> file.</p>
           <div
             class="drop-zone"
             :class="{ 'drag-over': isDragging }"
@@ -333,6 +365,14 @@ function app() {
     isDragging: false,
     minPasses: 3,
 
+    // StatsBomb browser state
+    competitions: [],
+    compLoading: false,
+    selectedComp: '',
+    matchList: [],
+    matchLoading: false,
+    selectedMatch: '',
+
     nav: [
       { id: 'home',     icon: '🏠', label: 'Home'        },
       { id: 'overview', icon: '📊', label: 'Overview'    },
@@ -354,6 +394,47 @@ function app() {
 
     init() {
       this.$watch('page', p => { if (p !== 'home' && this.data) this.$nextTick(() => this.renderCurrentPage()); });
+      this.loadCompetitions();
+    },
+
+    // ── StatsBomb Open Data browser ──────────────────────────
+    async loadCompetitions() {
+      this.compLoading = true;
+      try {
+        const r = await fetch('/api/competitions');
+        if (!r.ok) throw new Error('Could not load competitions');
+        const d = await r.json();
+        this.competitions = d.competitions;
+      } catch(e) {
+        // Non-fatal — demo and upload still work
+        console.warn('Competitions unavailable:', e.message);
+      } finally {
+        this.compLoading = false;
+      }
+    },
+
+    async loadMatches() {
+      if (!this.selectedComp) return;
+      const [cid, sid] = this.selectedComp.split(':');
+      this.matchLoading = true;
+      this.matchList = [];
+      this.selectedMatch = '';
+      try {
+        const r = await fetch(`/api/matches?competition_id=${cid}&season_id=${sid}`);
+        if (!r.ok) throw new Error('Could not load matches');
+        const d = await r.json();
+        this.matchList = d.matches;
+      } catch(e) {
+        this.error = e.message;
+      } finally {
+        this.matchLoading = false;
+      }
+    },
+
+    async analyzeMatch() {
+      if (!this.selectedMatch) return;
+      this.loadingMsg = 'Fetching real match data & running analytics…';
+      await this._fetch(`/api/analyze/${this.selectedMatch}`, null);
     },
 
     // Returns the data slice for the currently selected team

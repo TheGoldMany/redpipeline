@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -23,6 +24,7 @@ from pipeline.analytics.pass_network import PassNetworkConfig, build_pass_networ
 from pipeline.analytics.pressing import PressingConfig, detect_pressing_triggers, pressing_summary
 from pipeline.analytics.xT import calculate_xT
 from pipeline.ingestion.loader import flatten_events
+from pipeline.ingestion.statsbomb_api import StatsBombError, get_competitions, get_events, get_matches
 from pipeline.qa.validators import run_all_checks
 
 PITCH_LENGTH = 120.0
@@ -208,11 +210,52 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/", include_in_schema=False)
+def serve_index():
+    """Serve the SPA (backstop; on Vercel this is normally served statically)."""
+    html = ROOT / "public" / "index.html"
+    if html.exists():
+        return FileResponse(str(html), media_type="text/html")
+    raise HTTPException(status_code=404, detail="Frontend not found")
+
+
 @app.get("/api/sample")
 def load_sample():
     """Return analytics for the built-in demo match."""
     events = generate_match_events(n_events=900, seed=42)
     return _build_analytics(events, "demo")
+
+
+# ---------------------------------------------------------------------------
+# StatsBomb Open Data — real professional match data
+# ---------------------------------------------------------------------------
+
+@app.get("/api/competitions")
+def competitions():
+    """List available StatsBomb Open Data competitions/seasons."""
+    try:
+        return {"competitions": get_competitions()}
+    except StatsBombError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/api/matches")
+def matches(competition_id: int, season_id: int):
+    """List matches for a competition/season."""
+    try:
+        return {"matches": get_matches(competition_id, season_id)}
+    except StatsBombError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/api/analyze/{match_id}")
+def analyze_match(match_id: int):
+    """Fetch a real StatsBomb match and run the full analytics pipeline."""
+    try:
+        events = get_events(match_id)
+    except StatsBombError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return _build_analytics(events, str(match_id))
 
 
 @app.post("/api/upload")
