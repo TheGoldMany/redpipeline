@@ -148,35 +148,42 @@ def progressive_pass_stats(df: pd.DataFrame) -> pd.DataFrame:
     """
     passes = df[df["type"] == "Pass"].copy()
     passes = passes.dropna(subset=["player_id"])
+    if passes.empty:
+        return pd.DataFrame()
 
-    # Approximate progressive: end_x > start_x + 10 (yards towards goal)
+    # Pre-compute per-pass flags as plain columns so we can use groupby.agg
+    # (avoids groupby.apply + include_groups, which is not portable across
+    # pandas versions).
     if "pass_end_x" in passes.columns:
-        passes["_progressive_approx"] = (
+        passes["_progressive"] = (
             passes["pass_end_x"] - passes["location_x"]
         ).fillna(0) >= 10.0
     else:
-        passes["_progressive_approx"] = False
+        passes["_progressive"] = False
 
-    successful = passes["pass_outcome"].isna() | (passes["pass_outcome"] == "Complete")
+    passes["_success"] = passes["pass_outcome"].isna() | (passes["pass_outcome"] == "Complete")
+
+    for col, default in (("xT_gain", 0.0), ("pass_length", float("nan")), ("under_pressure", False)):
+        if col not in passes.columns:
+            passes[col] = default
+    passes["_under_pressure"] = passes["under_pressure"].fillna(False)
 
     stats = (
-        passes.groupby(["player_id", "player_name"])
-        .apply(
-            lambda g: pd.Series(
-                {
-                    "total_passes": len(g),
-                    "successful_passes": int(g[successful.reindex(g.index, fill_value=False)].shape[0]),
-                    "progressive_passes": int(g["_progressive_approx"].sum()),
-                    "xT_gain_total": g["xT_gain"].sum() if "xT_gain" in g.columns else None,
-                    "xT_gain_per_pass": g["xT_gain"].mean() if "xT_gain" in g.columns else None,
-                    "mean_pass_length": g["pass_length"].mean() if "pass_length" in g.columns else None,
-                    "passes_under_pressure": int(g["under_pressure"].fillna(False).sum()),
-                }
-            ),
-            include_groups=False,
+        passes.groupby(["player_id", "player_name"], dropna=False)
+        .agg(
+            total_passes=("event_id", "count"),
+            successful_passes=("_success", "sum"),
+            progressive_passes=("_progressive", "sum"),
+            xT_gain_total=("xT_gain", "sum"),
+            xT_gain_per_pass=("xT_gain", "mean"),
+            mean_pass_length=("pass_length", "mean"),
+            passes_under_pressure=("_under_pressure", "sum"),
         )
         .reset_index()
     )
+
+    for col in ("successful_passes", "progressive_passes", "passes_under_pressure"):
+        stats[col] = stats[col].astype(int)
 
     stats["pass_completion_pct"] = (stats["successful_passes"] / stats["total_passes"].replace(0, pd.NA)) * 100
     return stats.sort_values("progressive_passes", ascending=False).reset_index(drop=True)
